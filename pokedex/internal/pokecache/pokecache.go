@@ -5,10 +5,10 @@ import (
 	"time"
 )
 
+// Cache -
 type Cache struct {
-	// Add fields for caching Pokémon data as needed
-	mapData map[string]cacheEntry
-	mux     *sync.Mutex
+	cache map[string]cacheEntry
+	mux   *sync.Mutex
 }
 
 type cacheEntry struct {
@@ -16,51 +16,49 @@ type cacheEntry struct {
 	val       []byte
 }
 
-func NewCache(interval time.Duration) *Cache {
-	c := &Cache{
-		mapData: make(map[string]cacheEntry),
-		mux:     &sync.Mutex{},
+// NewCache -
+func NewCache(interval time.Duration) Cache {
+	c := Cache{
+		cache: make(map[string]cacheEntry),
+		mux:   &sync.Mutex{},
 	}
+
 	go c.reapLoop(interval)
+
 	return c
 }
 
-func (c *Cache) Add(key string, val []byte) {
+// Add -
+func (c *Cache) Add(key string, value []byte) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
-
-	c.mapData[key] = cacheEntry{
-		createdAt: time.Now(),
-		val:       val,
+	c.cache[key] = cacheEntry{
+		createdAt: time.Now().UTC(),
+		val:       value,
 	}
 }
 
+// Get -
 func (c *Cache) Get(key string) ([]byte, bool) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
-
-	entry, exists := c.mapData[key]
-	if !exists {
-		return nil, false
-	}
-	return entry.val, true
+	val, ok := c.cache[key]
+	return val.val, ok
 }
 
 func (c *Cache) reapLoop(interval time.Duration) {
 	ticker := time.NewTicker(interval)
-	for now := range ticker.C {
-		c.reap(now, interval)
+	for range ticker.C {
+		c.reap(time.Now().UTC(), interval)
 	}
 }
 
-func (c *Cache) reap(now time.Time, interval time.Duration) {
+func (c *Cache) reap(now time.Time, last time.Duration) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
-
-	cutoff := now.Add(-interval)
-	for key, entry := range c.mapData {
-		if entry.createdAt.Before(cutoff) {
-			delete(c.mapData, key)
+	for k, v := range c.cache {
+		if v.createdAt.Before(now.Add(-last)) {
+			delete(c.cache, k)
 		}
 	}
 }
